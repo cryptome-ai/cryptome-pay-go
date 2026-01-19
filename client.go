@@ -17,7 +17,9 @@ package cryptomepay
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -234,8 +236,14 @@ type MerchantResponse struct {
 
 // CreatePayment creates a new payment order
 func (c *Client) CreatePayment(params *CreatePaymentParams) (*PaymentResponse, error) {
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	nonce := generateNonce()
+
 	// Build params map for signing
 	paramsMap := map[string]string{
+		"api_key":    c.apiKey,
+		"timestamp":  timestamp,
+		"nonce":      nonce,
 		"order_id":   params.OrderID,
 		"amount":     formatAmount(params.Amount),
 		"notify_url": params.NotifyURL,
@@ -248,11 +256,14 @@ func (c *Client) CreatePayment(params *CreatePaymentParams) (*PaymentResponse, e
 		paramsMap["chain_type"] = params.ChainType
 	}
 
-	// Generate signature
+	// Generate HMAC-SHA256 signature
 	signature := c.generateSignature(paramsMap)
 
 	// Build request body
 	body := map[string]interface{}{
+		"api_key":    c.apiKey,
+		"timestamp":  timestamp,
+		"nonce":      nonce,
 		"order_id":   params.OrderID,
 		"amount":     params.Amount,
 		"notify_url": params.NotifyURL,
@@ -360,7 +371,7 @@ func (c *Client) VerifyWebhookSignatureFromMap(payload map[string]interface{}) b
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) == 1
 }
 
-// generateSignature generates MD5 signature
+// generateSignature generates HMAC-SHA256 signature
 func (c *Client) generateSignature(params map[string]string) string {
 	// Get sorted keys (excluding empty values and signature)
 	keys := make([]string, 0, len(params))
@@ -381,11 +392,18 @@ func (c *Client) generateSignature(params map[string]string) string {
 		builder.WriteString("=")
 		builder.WriteString(params[k])
 	}
-	builder.WriteString(c.apiSecret)
 
-	// Calculate MD5
-	hash := md5.Sum([]byte(builder.String()))
-	return hex.EncodeToString(hash[:])
+	// Calculate HMAC-SHA256
+	h := hmac.New(sha256.New, []byte(c.apiSecret))
+	h.Write([]byte(builder.String()))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// generateNonce generates a random nonce string
+func generateNonce() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // request makes an HTTP request
