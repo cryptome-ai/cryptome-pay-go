@@ -285,14 +285,14 @@ func (c *Client) CreatePayment(params *CreatePaymentParams) (*PaymentResponse, e
 // QueryPaymentByTradeID queries a payment by trade_id
 func (c *Client) QueryPaymentByTradeID(tradeID string) (*OrderResponse, error) {
 	var resp OrderResponse
-	err := c.request("GET", "/order/query?trade_id="+url.QueryEscape(tradeID), nil, &resp)
+	err := c.request("GET", "/merchant/order/query?trade_id="+url.QueryEscape(tradeID), nil, &resp)
 	return &resp, err
 }
 
 // QueryPaymentByOrderID queries a payment by order_id
 func (c *Client) QueryPaymentByOrderID(orderID string) (*OrderResponse, error) {
 	var resp OrderResponse
-	err := c.request("GET", "/order/query?order_id="+url.QueryEscape(orderID), nil, &resp)
+	err := c.request("GET", "/merchant/order/query?order_id="+url.QueryEscape(orderID), nil, &resp)
 	return &resp, err
 }
 
