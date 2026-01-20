@@ -220,7 +220,7 @@ type MerchantData struct {
 	MerchantCode string `json:"merchant_code"`
 	Name         string `json:"name"`
 	Email        string `json:"email"`
-	Status       string `json:"status"`
+	Status       int    `json:"status"`
 	KYCStatus    string `json:"kyc_status"`
 	KYCLevel     int    `json:"kyc_level"`
 	CreatedAt    string `json:"created_at"`

@@ -47,8 +47,8 @@ func TestGenerateSignature(t *testing.T) {
 
 	signature := client.generateSignature(params)
 
-	// Signature should be 32 character hex string
-	assert.Len(t, signature, 32)
+	// Signature should be 64 character hex string (HMAC-SHA256)
+	assert.Len(t, signature, 64)
 
 	// Same params should produce same signature
 	signature2 := client.generateSignature(params)
