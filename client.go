@@ -18,6 +18,7 @@ package cryptomepay
 import (
 	"bytes"
 	"crypto/hmac"
+	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -209,10 +210,19 @@ type WebhookPayload struct {
 	ActualAmount       float64 `json:"actual_amount"`
 	Token              string  `json:"token"`
 	ChainType          string  `json:"chain_type"`
+	ChainName          string  `json:"chain_name"`
 	BlockTransactionID string  `json:"block_transaction_id"`
 	Status             int     `json:"status"`
+	Timestamp          int64   `json:"timestamp"`
 	Signature          string  `json:"signature"`
+	SignatureVersion   int     `json:"signature_version"`
 }
+
+// Signature version constants
+const (
+	SignatureVersionMD5    = 1 // Legacy (deprecated)
+	SignatureVersionSHA256 = 2 // HMAC-SHA256 (recommended)
+)
 
 // MerchantData holds merchant profile data
 type MerchantData struct {
@@ -336,7 +346,7 @@ func (c *Client) GetMerchantInfo() (*MerchantResponse, error) {
 	return &resp, err
 }
 
-// VerifyWebhookSignature verifies a webhook payload signature
+// VerifyWebhookSignature verifies a webhook payload signature (supports both SHA256 and legacy MD5)
 func (c *Client) VerifyWebhookSignature(payload *WebhookPayload) bool {
 	params := map[string]string{
 		"trade_id":             payload.TradeID,
@@ -347,28 +357,93 @@ func (c *Client) VerifyWebhookSignature(payload *WebhookPayload) bool {
 		"chain_type":           payload.ChainType,
 		"block_transaction_id": payload.BlockTransactionID,
 		"status":               fmt.Sprintf("%d", payload.Status),
+		"timestamp":            fmt.Sprintf("%d", payload.Timestamp),
 	}
 
-	expected := c.generateSignature(params)
+	if payload.ChainName != "" {
+		params["chain_name"] = payload.ChainName
+	}
+
+	signatureVersion := payload.SignatureVersion
+	if signatureVersion == 0 {
+		signatureVersion = 1
+	}
+
+	expected := c.calculateSignature(params, signatureVersion)
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(payload.Signature)) == 1
 }
 
-// VerifyWebhookSignatureFromMap verifies a webhook signature from a map
+// VerifyWebhookSignatureFromMap verifies a webhook signature from a map (supports both SHA256 and legacy MD5)
 func (c *Client) VerifyWebhookSignatureFromMap(payload map[string]interface{}) bool {
 	signature, ok := payload["signature"].(string)
 	if !ok {
 		return false
 	}
 
+	signatureVersion := 1
+	if v, ok := payload["signature_version"].(float64); ok {
+		signatureVersion = int(v)
+	}
+
 	params := make(map[string]string)
 	for k, v := range payload {
-		if k != "signature" {
+		if k == "signature" || k == "signature_version" {
+			continue
+		}
+		if v == nil || v == "" {
+			continue
+		}
+		// Format numbers correctly
+		switch val := v.(type) {
+		case float64:
+			if k == "amount" {
+				params[k] = fmt.Sprintf("%.2f", val)
+			} else if k == "actual_amount" {
+				params[k] = fmt.Sprintf("%.4f", val)
+			} else {
+				params[k] = fmt.Sprintf("%v", v)
+			}
+		default:
 			params[k] = fmt.Sprintf("%v", v)
 		}
 	}
 
-	expected := c.generateSignature(params)
+	expected := c.calculateSignature(params, signatureVersion)
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) == 1
+}
+
+// calculateSignature calculates signature based on version
+func (c *Client) calculateSignature(params map[string]string, version int) string {
+	// Get sorted keys (excluding empty values and signature fields)
+	keys := make([]string, 0, len(params))
+	for k, v := range params {
+		if k != "signature" && k != "signature_version" && v != "" {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+
+	// Build query string
+	var builder strings.Builder
+	for i, k := range keys {
+		if i > 0 {
+			builder.WriteString("&")
+		}
+		builder.WriteString(k)
+		builder.WriteString("=")
+		builder.WriteString(params[k])
+	}
+
+	if version == SignatureVersionSHA256 {
+		// HMAC-SHA256 (recommended)
+		h := hmac.New(sha256.New, []byte(c.apiSecret))
+		h.Write([]byte(builder.String()))
+		return hex.EncodeToString(h.Sum(nil))
+	}
+
+	// Legacy MD5 (deprecated)
+	hash := md5.Sum([]byte(builder.String() + c.apiSecret))
+	return hex.EncodeToString(hash[:])
 }
 
 // generateSignature generates HMAC-SHA256 signature
