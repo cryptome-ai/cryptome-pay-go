@@ -102,18 +102,3 @@ func ExampleClient_VerifyWebhookSignature() {
 	}
 }
 
-func ExampleClient_UseSandbox() {
-	client := cryptomepay.NewClient("sk_sandbox_xxx", "secret")
-	client.UseSandbox()
-
-	// Now using sandbox environment
-	payment, _ := client.CreatePayment(&cryptomepay.CreatePaymentParams{
-		OrderID:   "TEST_001",
-		Amount:    100.01, // Auto-success amount in sandbox
-		NotifyURL: "https://webhook.site/test",
-	})
-
-	if payment != nil && payment.StatusCode == 200 {
-		fmt.Println("Sandbox payment created")
-	}
-}

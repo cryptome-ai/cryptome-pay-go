@@ -19,20 +19,14 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestClientWithOptions(t *testing.T) {
+	customURL := "https://custom.example.com/api/v1"
 	client := NewClientWithOptions(
 		"sk_test_key",
 		"test_secret",
-		WithBaseURL(SandboxURL),
+		WithBaseURL(customURL),
 	)
 
-	assert.Equal(t, SandboxURL, client.baseURL)
-}
-
-func TestUseSandbox(t *testing.T) {
-	client := NewClient("sk_test_key", "test_secret")
-	client.UseSandbox()
-
-	assert.Equal(t, SandboxURL, client.baseURL)
+	assert.Equal(t, customURL, client.baseURL)
 }
 
 func TestGenerateSignature(t *testing.T) {
@@ -175,6 +169,7 @@ func TestVerifyWebhookSignature(t *testing.T) {
 		"chain_type":           "BSC",
 		"block_transaction_id": "0x123",
 		"status":               "2",
+		"timestamp":            "1700000000",
 	}
 	validSignature := client.generateSignature(params)
 
@@ -188,6 +183,7 @@ func TestVerifyWebhookSignature(t *testing.T) {
 		ChainType:          "BSC",
 		BlockTransactionID: "0x123",
 		Status:             2,
+		Timestamp:          1700000000,
 		Signature:          validSignature,
 	}
 

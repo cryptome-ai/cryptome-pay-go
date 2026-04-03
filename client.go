@@ -18,7 +18,6 @@ package cryptomepay
 import (
 	"bytes"
 	"crypto/hmac"
-	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -36,12 +35,8 @@ import (
 // Version is the SDK version
 const Version = "1.0.0"
 
-// Default base URLs
-const (
-	ProductionURL = "https://api.cryptomepay.com/api/v1"
-	SandboxURL    = "https://sandbox.cryptomepay.com/api/v1"
-	StagingURL    = "https://staging.cryptomepay.com/api/v1"
-)
+// API Base URL
+const ProductionURL = "https://api.cryptomepay.com/api/v1"
 
 // Chain types
 const (
@@ -109,18 +104,6 @@ func NewClientWithOptions(apiKey, apiSecret string, opts ...Option) *Client {
 	for _, opt := range opts {
 		opt(c)
 	}
-	return c
-}
-
-// UseSandbox switches the client to use the sandbox environment
-func (c *Client) UseSandbox() *Client {
-	c.baseURL = SandboxURL
-	return c
-}
-
-// UseProduction switches the client to use the production environment
-func (c *Client) UseProduction() *Client {
-	c.baseURL = ProductionURL
 	return c
 }
 
@@ -215,14 +198,7 @@ type WebhookPayload struct {
 	Status             int     `json:"status"`
 	Timestamp          int64   `json:"timestamp"`
 	Signature          string  `json:"signature"`
-	SignatureVersion   int     `json:"signature_version"`
 }
-
-// Signature version constants
-const (
-	SignatureVersionMD5    = 1 // Legacy (deprecated)
-	SignatureVersionSHA256 = 2 // HMAC-SHA256 (recommended)
-)
 
 // MerchantData holds merchant profile data
 type MerchantData struct {
@@ -346,7 +322,7 @@ func (c *Client) GetMerchantInfo() (*MerchantResponse, error) {
 	return &resp, err
 }
 
-// VerifyWebhookSignature verifies a webhook payload signature (supports both SHA256 and legacy MD5)
+// VerifyWebhookSignature verifies a webhook payload signature (HMAC-SHA256)
 func (c *Client) VerifyWebhookSignature(payload *WebhookPayload) bool {
 	params := map[string]string{
 		"trade_id":             payload.TradeID,
@@ -364,30 +340,20 @@ func (c *Client) VerifyWebhookSignature(payload *WebhookPayload) bool {
 		params["chain_name"] = payload.ChainName
 	}
 
-	signatureVersion := payload.SignatureVersion
-	if signatureVersion == 0 {
-		signatureVersion = 1
-	}
-
-	expected := c.calculateSignature(params, signatureVersion)
+	expected := c.calculateSignature(params)
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(payload.Signature)) == 1
 }
 
-// VerifyWebhookSignatureFromMap verifies a webhook signature from a map (supports both SHA256 and legacy MD5)
+// VerifyWebhookSignatureFromMap verifies a webhook signature from a map (HMAC-SHA256)
 func (c *Client) VerifyWebhookSignatureFromMap(payload map[string]interface{}) bool {
 	signature, ok := payload["signature"].(string)
 	if !ok {
 		return false
 	}
 
-	signatureVersion := 1
-	if v, ok := payload["signature_version"].(float64); ok {
-		signatureVersion = int(v)
-	}
-
 	params := make(map[string]string)
 	for k, v := range payload {
-		if k == "signature" || k == "signature_version" {
+		if k == "signature" {
 			continue
 		}
 		if v == nil || v == "" {
@@ -408,16 +374,16 @@ func (c *Client) VerifyWebhookSignatureFromMap(payload map[string]interface{}) b
 		}
 	}
 
-	expected := c.calculateSignature(params, signatureVersion)
+	expected := c.calculateSignature(params)
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) == 1
 }
 
-// calculateSignature calculates signature based on version
-func (c *Client) calculateSignature(params map[string]string, version int) string {
-	// Get sorted keys (excluding empty values and signature fields)
+// calculateSignature calculates HMAC-SHA256 signature
+func (c *Client) calculateSignature(params map[string]string) string {
+	// Get sorted keys (excluding empty values and signature field)
 	keys := make([]string, 0, len(params))
 	for k, v := range params {
-		if k != "signature" && k != "signature_version" && v != "" {
+		if k != "signature" && v != "" {
 			keys = append(keys, k)
 		}
 	}
@@ -434,16 +400,9 @@ func (c *Client) calculateSignature(params map[string]string, version int) strin
 		builder.WriteString(params[k])
 	}
 
-	if version == SignatureVersionSHA256 {
-		// HMAC-SHA256 (recommended)
-		h := hmac.New(sha256.New, []byte(c.apiSecret))
-		h.Write([]byte(builder.String()))
-		return hex.EncodeToString(h.Sum(nil))
-	}
-
-	// Legacy MD5 (deprecated)
-	hash := md5.Sum([]byte(builder.String() + c.apiSecret))
-	return hex.EncodeToString(hash[:])
+	h := hmac.New(sha256.New, []byte(c.apiSecret))
+	h.Write([]byte(builder.String()))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // generateSignature generates HMAC-SHA256 signature

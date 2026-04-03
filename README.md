@@ -54,27 +54,15 @@ func main() {
 ### Using Options
 
 ```go
-// With custom base URL (for sandbox)
+// With custom timeout
 client := cryptomepay.NewClientWithOptions(
-    "sk_sandbox_xxx",
+    "sk_live_xxx",
     "secret",
-    cryptomepay.WithBaseURL(cryptomepay.SandboxURL),
     cryptomepay.WithTimeout(60 * time.Second),
 )
-
-// Or switch environments
-client := cryptomepay.NewClient("key", "secret")
-client.UseSandbox() // Switch to sandbox
-client.UseProduction() // Switch back to production
 ```
 
-### Environments
-
-| Environment | Base URL | Description |
-|-------------|----------|-------------|
-| Production | `https://api.cryptomepay.com/api/v1` | Live transactions |
-| Sandbox | `https://sandbox.cryptomepay.com/api/v1` | Testing with mock data |
-| Staging | `https://staging.cryptomepay.com/api/v1` | Testing with testnet |
+> **Sandbox Testing:** Use the Merchant Dashboard's built-in Sandbox page to test payment flows without real blockchain transactions.
 
 ## API Reference
 
